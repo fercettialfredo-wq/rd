@@ -4,7 +4,7 @@
 
 const CONFIG = {
     // Tu Proxy de Azure existente
-    API_PROXY_URL: 'https://proxyoperador.azurewebsites.net/api/ravens-proxy'
+    API_PROXY_URL: 'https://proxyguard.azurewebsites.net/api/ravens-proxy'
 };
 
 const STATE = {
