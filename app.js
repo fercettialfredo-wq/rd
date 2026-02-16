@@ -26,7 +26,8 @@ const SCREENS = {
         <div class="login-screen">
             <div class="login-box">
                 <div style="text-align:center; margin-bottom:40px;">
-                    <i class="fas fa-shield-alt fa-3x" style="color:#ef4444; margin-bottom:15px;"></i>
+                    <img src="icons/logo.png" alt="Ravens Logo" style="width: 120px; height: auto; margin-bottom: 15px;">
+                    
                     <h1 style="color:white; font-size:1.6rem; margin:0;">RAVENS GUARD</h1>
                     <p style="color:#666; font-size:0.8rem;">Control de Rondines NFC</p>
                 </div>
