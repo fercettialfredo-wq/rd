@@ -14,9 +14,9 @@ const STATE = {
         usuario: null
     },
     isScanning: false,
-    isProcessing: false, // Nuevo: Evita lecturas duplicadas en milisegundos
+    isProcessing: false, // Evita lecturas duplicadas en milisegundos
     ndefReader: null,
-    abortController: null // Nuevo: Permite apagar la antena NFC al leer
+    abortController: null // Permite apagar la antena NFC al leer
 };
 
 /* =========================================
@@ -272,7 +272,8 @@ async function registerPositionInDB(tagId) {
         const res = await response.json();
 
         if (res.success) {
-            showModal('success', "Se ha validado la posición");
+            // Aquí está el cambio: solo muestra "Posición registrada" sin el ID
+            showModal('success', "Posición registrada");
         } else {
             showModal('error', "Error: " + res.message);
         }
