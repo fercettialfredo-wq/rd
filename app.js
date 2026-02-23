@@ -254,7 +254,7 @@ async function registerPositionInDB(tagId) {
         const res = await response.json();
 
         if (res.success) {
-            showModal('success', "Posición Registrada: " + tagId);
+            showModal('success', "Se ha validado la posición");
         } else {
             showModal('error', "Error: " + res.message);
         }
