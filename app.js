@@ -185,6 +185,8 @@ async function toggleNFCScan() {
         };
 
         STATE.ndefReader.onreadingerror = () => {
+            if (STATE.isProcessing) return;
+            STATE.isProcessing = true; // Bloqueamos para evitar spam de errores
             showModal('error', "Error al leer etiqueta. Intenta de nuevo.");
             resetScanUI();
         };
@@ -226,7 +228,7 @@ async function handleNFCReading(event) {
     if (!serialNumber) {
         showModal('error', "Lectura vacía");
         resetScanUI();
-        STATE.isProcessing = false; // Liberamos el candado
+        // Nota: NO liberamos isProcessing aquí. Se liberará al cerrar el modal.
         return;
     }
 
@@ -236,8 +238,7 @@ async function handleNFCReading(event) {
     // Enviar a Base de Datos de forma controlada
     await registerPositionInDB(serialNumber);
     
-    // Liberamos el candado una vez que la petición a la BD haya terminado
-    STATE.isProcessing = false;
+    // Nota: El candado isProcessing se liberará únicamente cuando el guardia cierre el modal.
 }
 
 /* =========================================
@@ -272,7 +273,7 @@ async function registerPositionInDB(tagId) {
         const res = await response.json();
 
         if (res.success) {
-            // Aquí está el cambio: solo muestra "Posición registrada" sin el ID
+            // Muestra solo el mensaje de éxito sin el ID del tag
             showModal('success', "Posición registrada");
         } else {
             showModal('error', "Error: " + res.message);
@@ -305,6 +306,10 @@ function showModal(type, text) {
 
 function closeModal() {
     document.getElementById('status-modal').style.display = 'none';
+    
+    // LA SOLUCIÓN: Solo liberamos el candado de lectura cuando el usuario explícitamente cierra el modal.
+    // Esto previene al 100% las lecturas dobles por dejar el teléfono apoyado o por rebotes de la antena NFC.
+    STATE.isProcessing = false; 
 }
 
 // INICIO
