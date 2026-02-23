@@ -14,7 +14,9 @@ const STATE = {
         usuario: null
     },
     isScanning: false,
-    ndefReader: null // Lector NFC
+    isProcessing: false, // Nuevo: Evita lecturas duplicadas en milisegundos
+    ndefReader: null,
+    abortController: null // Nuevo: Permite apagar la antena NFC al leer
 };
 
 /* =========================================
@@ -63,7 +65,8 @@ const SCREENS = {
                 </div>
 
                 <div class="info-text">
-                    Acerca el dispositivo al punto de control NFC.<br>
+                    Acerca el dispositivo al punto de control NFC.
+
                     Asegúrate de tener el NFC activado.
                 </div>
             </div>
@@ -81,7 +84,7 @@ function navigate(screenName) {
     viewport.innerHTML = SCREENS[screenName];
 }
 
-// --- LOGIN (Reutilizado) ---
+// --- LOGIN ---
 async function doLogin() {
     const user = document.getElementById('login-user').value;
     const pass = document.getElementById('login-pass').value;
@@ -154,8 +157,8 @@ async function toggleNFCScan() {
     const statusTxt = document.getElementById('status-text');
     const btnTxt = document.getElementById('btn-text');
 
-    if (STATE.isScanning) {
-        // Cancelar escaneo (opcional, normalmente no se detiene manualmente)
+    // Prevenir que se inicie si ya está escaneando o procesando una lectura
+    if (STATE.isScanning || STATE.isProcessing) {
         return;
     }
 
@@ -165,8 +168,11 @@ async function toggleNFCScan() {
     }
 
     try {
+        STATE.abortController = new AbortController(); // Crear controlador para detener el escaneo luego
         STATE.ndefReader = new NDEFReader();
-        await STATE.ndefReader.scan();
+        
+        // Iniciar escaneo con la señal de aborto
+        await STATE.ndefReader.scan({ signal: STATE.abortController.signal });
         
         // Cambio visual a modo "Escuchando"
         STATE.isScanning = true;
@@ -204,22 +210,34 @@ function resetScanUI() {
 }
 
 async function handleNFCReading(event) {
-    // 1. Obtener ID único del TAG (Serial Number)
-    const serialNumber = event.serialNumber;
+    // Si ya estamos procesando una lectura, ignoramos los rebotes del sensor
+    if (STATE.isProcessing) return; 
     
-    // Si necesitas leer datos internos del tag, usa event.message
-    // Por ahora usaremos el Serial Number como "ID de Posición"
+    // Bloqueamos nuevas lecturas inmediatamente
+    STATE.isProcessing = true;
+
+    // Apagamos la antena NFC para evitar lecturas en ráfaga
+    if (STATE.abortController) {
+        STATE.abortController.abort();
+    }
+
+    const serialNumber = event.serialNumber;
     
     if (!serialNumber) {
         showModal('error', "Lectura vacía");
+        resetScanUI();
+        STATE.isProcessing = false; // Liberamos el candado
         return;
     }
 
     // Detener UI de escaneo
     resetScanUI();
     
-    // Enviar a Base de Datos
+    // Enviar a Base de Datos de forma controlada
     await registerPositionInDB(serialNumber);
+    
+    // Liberamos el candado una vez que la petición a la BD haya terminado
+    STATE.isProcessing = false;
 }
 
 /* =========================================
@@ -231,7 +249,7 @@ async function registerPositionInDB(tagId) {
 
     const payload = {
         action: 'submit_form',
-        formulario: 'RONDINES', // <--- Asegúrate que tu Logic App maneje este caso 'RONDINES'
+        formulario: 'RONDINES',
         condominio: STATE.session.condominioId,
         usuario: STATE.session.usuario,
         data: {
