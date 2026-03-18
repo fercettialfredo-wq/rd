@@ -51,7 +51,7 @@ const SCREENS = {
         <div class="main-screen">
             <header class="header-app">
                 <div class="header-logo-text">RONDINES</div>
-                <div onclick="doLogout()" style="cursor:pointer; color:#ef4444;">
+                <div onclick="doLogout()" style="cursor:pointer; color:#ef4444;" title="Cerrar sesión">
                     <i class="fas fa-sign-out-alt fa-lg"></i>
                 </div>
             </header>
@@ -66,7 +66,6 @@ const SCREENS = {
 
                 <div class="info-text">
                     Acerca el dispositivo al punto de control NFC.
-
                     Asegúrate de tener el NFC activado.
                 </div>
             </div>
@@ -81,12 +80,14 @@ const SCREENS = {
 // --- NAVEGACIÓN ---
 function navigate(screenName) {
     const viewport = document.getElementById('viewport');
-    viewport.innerHTML = SCREENS[screenName];
+    if (viewport) {
+        viewport.innerHTML = SCREENS[screenName];
+    }
 }
 
 // --- LOGIN ---
 async function doLogin() {
-    const user = document.getElementById('login-user').value;
+    const user = document.getElementById('login-user').value.trim();
     const pass = document.getElementById('login-pass').value;
     const errorMsg = document.getElementById('login-error');
 
@@ -107,7 +108,7 @@ async function doLogin() {
         const data = await response.json();
         
         if (response.ok && data.success) {
-            const condId = data.condominioId || data.condominio || (data.data && data.data.condominio);
+            const condId = data.condominioId || data.condominio || (data.data && data.data.condominio) || "NO_ID";
             
             STATE.session = {
                 isLoggedIn: true,
@@ -115,6 +116,7 @@ async function doLogin() {
                 usuario: user
             };
             
+            // Guardar en persistencia
             localStorage.setItem('ravensGuardUser', JSON.stringify(STATE.session));
             navigate('MAIN');
         } else { 
@@ -129,23 +131,31 @@ async function doLogin() {
 }
 
 function doLogout() {
+    // Limpiar variables de sesión y almacenamiento local
     localStorage.removeItem('ravensGuardUser');
     STATE.session = { isLoggedIn: false, condominioId: null, usuario: null };
     navigate('LOGIN');
 }
 
 function checkSession() {
-    const saved = localStorage.getItem('ravensGuardUser');
-    if (saved) {
-        STATE.session = JSON.parse(saved);
-        if (STATE.session.condominioId) {
-            navigate('MAIN');
-        } else {
-            navigate('LOGIN');
+    try {
+        const saved = localStorage.getItem('ravensGuardUser');
+        if (saved) {
+            const parsedData = JSON.parse(saved);
+            
+            // Verificamos únicamente que la bandera de logueo sea verdadera y exista un usuario
+            if (parsedData && parsedData.isLoggedIn === true && parsedData.usuario) {
+                STATE.session = parsedData;
+                navigate('MAIN');
+                return; // Cortamos la ejecución aquí si hay sesión activa
+            }
         }
-    } else {
-        navigate('LOGIN');
+    } catch (e) {
+        console.error("Error al recuperar la sesión local:", e);
     }
+    
+    // Si llegamos a este punto, no hay sesión válida
+    navigate('LOGIN');
 }
 
 /* =========================================
@@ -290,6 +300,8 @@ async function registerPositionInDB(tagId) {
 
 function showModal(type, text) {
     const modal = document.getElementById('status-modal');
+    if (!modal) return;
+    
     let content = '';
 
     if (type === 'loading') {
@@ -305,7 +317,8 @@ function showModal(type, text) {
 }
 
 function closeModal() {
-    document.getElementById('status-modal').style.display = 'none';
+    const modal = document.getElementById('status-modal');
+    if (modal) modal.style.display = 'none';
     
     // LA SOLUCIÓN: Solo liberamos el candado de lectura cuando el usuario explícitamente cierra el modal.
     // Esto previene al 100% las lecturas dobles por dejar el teléfono apoyado o por rebotes de la antena NFC.
