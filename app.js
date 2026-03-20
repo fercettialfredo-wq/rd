@@ -1,5 +1,5 @@
 /* =========================================
-   RAVENS GUARD - NFC TRACKING
+   RAVENS GUARD - NFC TRACKING (OFFLINE SUPPORT)
    ========================================= */
 
 const CONFIG = {
@@ -50,7 +50,7 @@ const SCREENS = {
     'MAIN': `
         <div class="main-screen">
             <header class="header-app">
-                <div class="header-logo-text">RONDINES</div>
+                <div class="header-logo-text">RONDINES <span id="sync-status" style="font-size:0.7rem; color:#facc15; display:none;">(Pendientes)</span></div>
                 <div onclick="doLogout()" style="cursor:pointer; color:#ef4444;" title="Cerrar sesión">
                     <i class="fas fa-sign-out-alt fa-lg"></i>
                 </div>
@@ -82,6 +82,9 @@ function navigate(screenName) {
     const viewport = document.getElementById('viewport');
     if (viewport) {
         viewport.innerHTML = SCREENS[screenName];
+        if (screenName === 'MAIN') {
+            updateSyncUI(); // Actualiza el indicador si hay pendientes al cargar
+        }
     }
 }
 
@@ -93,7 +96,12 @@ async function doLogin() {
 
     if(!user || !pass) return;
 
-    // Feedback visual simple
+    if (!navigator.onLine) {
+        errorMsg.innerText = "Necesitas conexión a internet para iniciar sesión.";
+        errorMsg.style.display = "block";
+        return;
+    }
+
     const btn = document.querySelector('.btn-primary');
     btn.innerText = "Verificando...";
     btn.disabled = true;
@@ -116,7 +124,6 @@ async function doLogin() {
                 usuario: user
             };
             
-            // Guardar en persistencia
             localStorage.setItem('ravensGuardUser', JSON.stringify(STATE.session));
             navigate('MAIN');
         } else { 
@@ -131,7 +138,6 @@ async function doLogin() {
 }
 
 function doLogout() {
-    // Limpiar variables de sesión y almacenamiento local
     localStorage.removeItem('ravensGuardUser');
     STATE.session = { isLoggedIn: false, condominioId: null, usuario: null };
     navigate('LOGIN');
@@ -143,18 +149,17 @@ function checkSession() {
         if (saved) {
             const parsedData = JSON.parse(saved);
             
-            // Verificamos únicamente que la bandera de logueo sea verdadera y exista un usuario
             if (parsedData && parsedData.isLoggedIn === true && parsedData.usuario) {
                 STATE.session = parsedData;
                 navigate('MAIN');
-                return; // Cortamos la ejecución aquí si hay sesión activa
+                syncOfflineData(); // Intentar sincronizar si hay datos pendientes al abrir la app
+                return;
             }
         }
     } catch (e) {
         console.error("Error al recuperar la sesión local:", e);
     }
     
-    // Si llegamos a este punto, no hay sesión válida
     navigate('LOGIN');
 }
 
@@ -167,7 +172,6 @@ async function toggleNFCScan() {
     const statusTxt = document.getElementById('status-text');
     const btnTxt = document.getElementById('btn-text');
 
-    // Prevenir que se inicie si ya está escaneando o procesando una lectura
     if (STATE.isScanning || STATE.isProcessing) {
         return;
     }
@@ -178,13 +182,11 @@ async function toggleNFCScan() {
     }
 
     try {
-        STATE.abortController = new AbortController(); // Crear controlador para detener el escaneo luego
+        STATE.abortController = new AbortController(); 
         STATE.ndefReader = new NDEFReader();
         
-        // Iniciar escaneo con la señal de aborto
         await STATE.ndefReader.scan({ signal: STATE.abortController.signal });
         
-        // Cambio visual a modo "Escuchando"
         STATE.isScanning = true;
         btn.classList.add('scanning');
         statusTxt.innerText = "Acerca el TAG ahora...";
@@ -196,7 +198,7 @@ async function toggleNFCScan() {
 
         STATE.ndefReader.onreadingerror = () => {
             if (STATE.isProcessing) return;
-            STATE.isProcessing = true; // Bloqueamos para evitar spam de errores
+            STATE.isProcessing = true; 
             showModal('error', "Error al leer etiqueta. Intenta de nuevo.");
             resetScanUI();
         };
@@ -222,13 +224,10 @@ function resetScanUI() {
 }
 
 async function handleNFCReading(event) {
-    // Si ya estamos procesando una lectura, ignoramos los rebotes del sensor
     if (STATE.isProcessing) return; 
     
-    // Bloqueamos nuevas lecturas inmediatamente
     STATE.isProcessing = true;
 
-    // Apagamos la antena NFC para evitar lecturas en ráfaga
     if (STATE.abortController) {
         STATE.abortController.abort();
     }
@@ -238,25 +237,19 @@ async function handleNFCReading(event) {
     if (!serialNumber) {
         showModal('error', "Lectura vacía");
         resetScanUI();
-        // Nota: NO liberamos isProcessing aquí. Se liberará al cerrar el modal.
         return;
     }
 
-    // Detener UI de escaneo
     resetScanUI();
-    
-    // Enviar a Base de Datos de forma controlada
     await registerPositionInDB(serialNumber);
-    
-    // Nota: El candado isProcessing se liberará únicamente cuando el guardia cierre el modal.
 }
 
 /* =========================================
-   4. ENVÍO A BASE DE DATOS
+   4. ENVÍO A BASE DE DATOS Y MODO OFFLINE
    ========================================= */
 
 async function registerPositionInDB(tagId) {
-    showModal('loading', "Registrando posición...");
+    showModal('loading', "Procesando...");
 
     const payload = {
         action: 'submit_form',
@@ -273,6 +266,14 @@ async function registerPositionInDB(tagId) {
         }
     };
 
+    // 1. Si de plano sabemos que no hay internet, guardar localmente de inmediato
+    if (!navigator.onLine) {
+        saveToOfflineQueue(payload);
+        showModal('success', "Guardado localmente (Sin red)");
+        return;
+    }
+
+    // 2. Si hay internet, intentamos enviarlo
     try {
         const response = await fetch(CONFIG.API_PROXY_URL, {
             method: 'POST',
@@ -283,14 +284,81 @@ async function registerPositionInDB(tagId) {
         const res = await response.json();
 
         if (res.success) {
-            // Muestra solo el mensaje de éxito sin el ID del tag
-            showModal('success', "Posición registrada");
+            showModal('success', "Posición registrada en línea");
+            syncOfflineData(); // Si pasó uno, quizá podemos subir los pendientes
         } else {
+            // Error del servidor, no de red.
             showModal('error', "Error: " + res.message);
         }
 
     } catch (error) {
-        showModal('error', "Error de conexión");
+        // 3. Falló el fetch (ej. internet intermitente, proxy bloqueado).
+        // Evitamos el error rojo y lo guardamos para después.
+        saveToOfflineQueue(payload);
+        showModal('success', "Guardado localmente (Red inestable)");
+    }
+}
+
+// --- LÓGICA DE COLA OFFLINE ---
+function saveToOfflineQueue(payload) {
+    let queue = JSON.parse(localStorage.getItem('ravensOfflineQueue')) || [];
+    queue.push(payload);
+    localStorage.setItem('ravensOfflineQueue', JSON.stringify(queue));
+    updateSyncUI();
+}
+
+async function syncOfflineData() {
+    // Si no hay internet al momento de intentar sincronizar, abortar silenciosamente
+    if (!navigator.onLine) return;
+
+    let queue = JSON.parse(localStorage.getItem('ravensOfflineQueue')) || [];
+    if (queue.length === 0) {
+        updateSyncUI();
+        return;
+    }
+
+    let newQueue = []; // Aquí guardaremos los que fallen y haya que reintentar luego
+
+    for (let i = 0; i < queue.length; i++) {
+        try {
+            const response = await fetch(CONFIG.API_PROXY_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(queue[i])
+            });
+            const res = await response.json();
+            
+            // Si el servidor lo rechaza por un error interno o de lógica,
+            // podrías decidir mantenerlo o borrarlo. Por ahora, si NO es success,
+            // lo dejamos en la cola para no perder datos.
+            if (!res.success) {
+                newQueue.push(queue[i]);
+            }
+        } catch (error) {
+            // Falló la red durante el envío de este registro, se queda en la cola
+            newQueue.push(queue[i]);
+        }
+    }
+
+    localStorage.setItem('ravensOfflineQueue', JSON.stringify(newQueue));
+    updateSyncUI();
+    
+    // Opcional: Avisar al guardia que se sincronizaron datos pendientes
+    if (queue.length > 0 && newQueue.length === 0 && STATE.session.isLoggedIn) {
+        console.log("Sincronización de registros pendientes completada.");
+    }
+}
+
+function updateSyncUI() {
+    const syncBadge = document.getElementById('sync-status');
+    if (!syncBadge) return;
+
+    let queue = JSON.parse(localStorage.getItem('ravensOfflineQueue')) || [];
+    if (queue.length > 0) {
+        syncBadge.style.display = 'inline';
+        syncBadge.innerText = `(${queue.length} pend.)`;
+    } else {
+        syncBadge.style.display = 'none';
     }
 }
 
@@ -320,10 +388,23 @@ function closeModal() {
     const modal = document.getElementById('status-modal');
     if (modal) modal.style.display = 'none';
     
-    // LA SOLUCIÓN: Solo liberamos el candado de lectura cuando el usuario explícitamente cierra el modal.
-    // Esto previene al 100% las lecturas dobles por dejar el teléfono apoyado o por rebotes de la antena NFC.
     STATE.isProcessing = false; 
 }
+
+/* =========================================
+   6. EVENTOS DE RED Y ARRANQUE
+   ========================================= */
+
+// Escuchar cuando el teléfono recupera la conexión
+window.addEventListener('online', () => {
+    console.log("Conexión restaurada, intentando sincronizar...");
+    syncOfflineData();
+});
+
+// Escuchar cuando el teléfono pierde la conexión (Opcional, útil para debugear)
+window.addEventListener('offline', () => {
+    console.log("Sin conexión a internet. Modo offline activado.");
+});
 
 // INICIO
 window.onload = () => {
