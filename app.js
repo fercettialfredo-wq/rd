@@ -1,5 +1,5 @@
 /* =========================================
-   RAVENS GUARD - NFC TRACKING (OFFLINE SUPPORT V2)
+   RAVENS GUARD - NFC TRACKING (OFFLINE SUPPORT V3)
    ========================================= */
 
 const CONFIG = {
@@ -310,7 +310,7 @@ function saveToOfflineQueue(payload) {
     updateSyncUI();
 }
 
-// Nueva función de sincronización mejorada
+// Nueva función de sincronización con anti-saturación y lectura de errores reales
 async function syncOfflineData(isManual = false) {
     if (!navigator.onLine) {
         if (isManual) showModal('error', "Aún no hay conexión a internet estable.");
@@ -323,13 +323,13 @@ async function syncOfflineData(isManual = false) {
         return;
     }
 
-    // Si el usuario tocó el botón, le mostramos que está cargando
     if (isManual) {
         showModal('loading', `Enviando ${queue.length} lecturas pendientes...`);
     }
 
     let newQueue = [];
     let successCount = 0;
+    let lastErrorMsg = ""; // Variable para capturar el chisme de por qué falla
 
     for (let i = 0; i < queue.length; i++) {
         try {
@@ -343,23 +343,31 @@ async function syncOfflineData(isManual = false) {
             if (res.success) {
                 successCount++;
             } else {
-                newQueue.push(queue[i]); // Falló por algo del servidor, se queda
+                newQueue.push(queue[i]); 
+                // Guardamos el error exacto que mandó tu backend (ej. Power Apps)
+                lastErrorMsg = res.message || "Rechazado por el servidor";
             }
         } catch (error) {
-            newQueue.push(queue[i]); // Falló la red a medio camino, se queda
+            newQueue.push(queue[i]); 
+            lastErrorMsg = "Fallo de red o Proxy caído";
         }
+
+        // EL TRUCO MAGISTRAL: Esperar medio segundo (500ms) entre cada envío
+        // Esto evita que Azure o Power Automate bloqueen las peticiones por llegar en ráfaga
+        await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     // Actualizamos el almacenamiento con los que fallaron (si es que hubo)
     localStorage.setItem('ravensOfflineQueue', JSON.stringify(newQueue));
     updateSyncUI();
     
-    // Feedback final si fue manual o si hubo éxito
+    // Feedback final
     if (isManual) {
         if (newQueue.length === 0) {
             showModal('success', "¡Sincronización completada!");
         } else {
-            showModal('error', `Se enviaron ${successCount}. Faltan ${newQueue.length} por error de red.`);
+            // Ahora la pantalla te dirá exactamente de quién es la culpa
+            showModal('error', `Se enviaron ${successCount}. Fallaron ${newQueue.length}. Motivo: ${lastErrorMsg}`);
         }
     } else if (successCount > 0 && newQueue.length === 0 && STATE.session.isLoggedIn) {
         console.log("Sincronización silenciosa completada.");
