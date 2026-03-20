@@ -1,5 +1,5 @@
 /* =========================================
-   RAVENS GUARD - NFC TRACKING (OFFLINE SUPPORT)
+   RAVENS GUARD - NFC TRACKING (OFFLINE SUPPORT V2)
    ========================================= */
 
 const CONFIG = {
@@ -14,9 +14,9 @@ const STATE = {
         usuario: null
     },
     isScanning: false,
-    isProcessing: false, // Evita lecturas duplicadas en milisegundos
+    isProcessing: false, 
     ndefReader: null,
-    abortController: null // Permite apagar la antena NFC al leer
+    abortController: null 
 };
 
 /* =========================================
@@ -50,7 +50,12 @@ const SCREENS = {
     'MAIN': `
         <div class="main-screen">
             <header class="header-app">
-                <div class="header-logo-text">RONDINES <span id="sync-status" style="font-size:0.7rem; color:#facc15; display:none;">(Pendientes)</span></div>
+                <div class="header-logo-text">
+                    RONDINES 
+                    <span id="sync-status" onclick="syncOfflineData(true)" style="font-size:0.75rem; color:#facc15; display:none; cursor:pointer; background:rgba(255,255,255,0.15); padding:4px 8px; border-radius:6px; margin-left:10px;">
+                        <i class="fas fa-sync-alt"></i> Pendientes
+                    </span>
+                </div>
                 <div onclick="doLogout()" style="cursor:pointer; color:#ef4444;" title="Cerrar sesión">
                     <i class="fas fa-sign-out-alt fa-lg"></i>
                 </div>
@@ -77,18 +82,16 @@ const SCREENS = {
    2. FUNCIONES PRINCIPALES
    ========================================= */
 
-// --- NAVEGACIÓN ---
 function navigate(screenName) {
     const viewport = document.getElementById('viewport');
     if (viewport) {
         viewport.innerHTML = SCREENS[screenName];
         if (screenName === 'MAIN') {
-            updateSyncUI(); // Actualiza el indicador si hay pendientes al cargar
+            updateSyncUI(); 
         }
     }
 }
 
-// --- LOGIN ---
 async function doLogin() {
     const user = document.getElementById('login-user').value.trim();
     const pass = document.getElementById('login-pass').value;
@@ -126,6 +129,7 @@ async function doLogin() {
             
             localStorage.setItem('ravensGuardUser', JSON.stringify(STATE.session));
             navigate('MAIN');
+            syncOfflineData(); // Intentar subir pendientes tras login
         } else { 
             throw new Error(data.message || "Credenciales incorrectas."); 
         }
@@ -152,7 +156,7 @@ function checkSession() {
             if (parsedData && parsedData.isLoggedIn === true && parsedData.usuario) {
                 STATE.session = parsedData;
                 navigate('MAIN');
-                syncOfflineData(); // Intentar sincronizar si hay datos pendientes al abrir la app
+                syncOfflineData(); 
                 return;
             }
         }
@@ -179,6 +183,11 @@ async function toggleNFCScan() {
     if (!('NDEFReader' in window)) {
         alert("Tu dispositivo o navegador no soporta lectura NFC web. Asegúrate de usar Chrome en Android y HTTPS.");
         return;
+    }
+
+    // Aprovechamos que va a escanear para intentar limpiar la cola silenciosamente
+    if (navigator.onLine) {
+        syncOfflineData(false); 
     }
 
     try {
@@ -266,14 +275,12 @@ async function registerPositionInDB(tagId) {
         }
     };
 
-    // 1. Si de plano sabemos que no hay internet, guardar localmente de inmediato
     if (!navigator.onLine) {
         saveToOfflineQueue(payload);
         showModal('success', "Guardado localmente (Sin red)");
         return;
     }
 
-    // 2. Si hay internet, intentamos enviarlo
     try {
         const response = await fetch(CONFIG.API_PROXY_URL, {
             method: 'POST',
@@ -285,21 +292,17 @@ async function registerPositionInDB(tagId) {
 
         if (res.success) {
             showModal('success', "Posición registrada en línea");
-            syncOfflineData(); // Si pasó uno, quizá podemos subir los pendientes
+            syncOfflineData(); 
         } else {
-            // Error del servidor, no de red.
-            showModal('error', "Error: " + res.message);
+            showModal('error', "Error del servidor: " + res.message);
         }
 
     } catch (error) {
-        // 3. Falló el fetch (ej. internet intermitente, proxy bloqueado).
-        // Evitamos el error rojo y lo guardamos para después.
         saveToOfflineQueue(payload);
         showModal('success', "Guardado localmente (Red inestable)");
     }
 }
 
-// --- LÓGICA DE COLA OFFLINE ---
 function saveToOfflineQueue(payload) {
     let queue = JSON.parse(localStorage.getItem('ravensOfflineQueue')) || [];
     queue.push(payload);
@@ -307,9 +310,12 @@ function saveToOfflineQueue(payload) {
     updateSyncUI();
 }
 
-async function syncOfflineData() {
-    // Si no hay internet al momento de intentar sincronizar, abortar silenciosamente
-    if (!navigator.onLine) return;
+// Nueva función de sincronización mejorada
+async function syncOfflineData(isManual = false) {
+    if (!navigator.onLine) {
+        if (isManual) showModal('error', "Aún no hay conexión a internet estable.");
+        return;
+    }
 
     let queue = JSON.parse(localStorage.getItem('ravensOfflineQueue')) || [];
     if (queue.length === 0) {
@@ -317,7 +323,13 @@ async function syncOfflineData() {
         return;
     }
 
-    let newQueue = []; // Aquí guardaremos los que fallen y haya que reintentar luego
+    // Si el usuario tocó el botón, le mostramos que está cargando
+    if (isManual) {
+        showModal('loading', `Enviando ${queue.length} lecturas pendientes...`);
+    }
+
+    let newQueue = [];
+    let successCount = 0;
 
     for (let i = 0; i < queue.length; i++) {
         try {
@@ -328,24 +340,29 @@ async function syncOfflineData() {
             });
             const res = await response.json();
             
-            // Si el servidor lo rechaza por un error interno o de lógica,
-            // podrías decidir mantenerlo o borrarlo. Por ahora, si NO es success,
-            // lo dejamos en la cola para no perder datos.
-            if (!res.success) {
-                newQueue.push(queue[i]);
+            if (res.success) {
+                successCount++;
+            } else {
+                newQueue.push(queue[i]); // Falló por algo del servidor, se queda
             }
         } catch (error) {
-            // Falló la red durante el envío de este registro, se queda en la cola
-            newQueue.push(queue[i]);
+            newQueue.push(queue[i]); // Falló la red a medio camino, se queda
         }
     }
 
+    // Actualizamos el almacenamiento con los que fallaron (si es que hubo)
     localStorage.setItem('ravensOfflineQueue', JSON.stringify(newQueue));
     updateSyncUI();
     
-    // Opcional: Avisar al guardia que se sincronizaron datos pendientes
-    if (queue.length > 0 && newQueue.length === 0 && STATE.session.isLoggedIn) {
-        console.log("Sincronización de registros pendientes completada.");
+    // Feedback final si fue manual o si hubo éxito
+    if (isManual) {
+        if (newQueue.length === 0) {
+            showModal('success', "¡Sincronización completada!");
+        } else {
+            showModal('error', `Se enviaron ${successCount}. Faltan ${newQueue.length} por error de red.`);
+        }
+    } else if (successCount > 0 && newQueue.length === 0 && STATE.session.isLoggedIn) {
+        console.log("Sincronización silenciosa completada.");
     }
 }
 
@@ -355,8 +372,9 @@ function updateSyncUI() {
 
     let queue = JSON.parse(localStorage.getItem('ravensOfflineQueue')) || [];
     if (queue.length > 0) {
-        syncBadge.style.display = 'inline';
-        syncBadge.innerText = `(${queue.length} pend.)`;
+        syncBadge.style.display = 'inline-block';
+        // Actualizamos el número en el texto del botón
+        syncBadge.innerHTML = `<i class="fas fa-sync-alt"></i> ${queue.length} Pendiente(s)`;
     } else {
         syncBadge.style.display = 'none';
     }
@@ -387,7 +405,6 @@ function showModal(type, text) {
 function closeModal() {
     const modal = document.getElementById('status-modal');
     if (modal) modal.style.display = 'none';
-    
     STATE.isProcessing = false; 
 }
 
@@ -395,18 +412,15 @@ function closeModal() {
    6. EVENTOS DE RED Y ARRANQUE
    ========================================= */
 
-// Escuchar cuando el teléfono recupera la conexión
 window.addEventListener('online', () => {
-    console.log("Conexión restaurada, intentando sincronizar...");
-    syncOfflineData();
+    // Cuando el celular detecta que regresó el WiFi/Datos, intenta sincronizar calladito
+    syncOfflineData(false);
 });
 
-// Escuchar cuando el teléfono pierde la conexión (Opcional, útil para debugear)
 window.addEventListener('offline', () => {
     console.log("Sin conexión a internet. Modo offline activado.");
 });
 
-// INICIO
 window.onload = () => {
     checkSession();
 };
