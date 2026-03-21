@@ -1,5 +1,5 @@
 /* =========================================
-   RAVENS GUARD - NFC TRACKING (OFFLINE SUPPORT V3)
+   RAVENS GUARD - NFC TRACKING (OFFLINE SUPPORT V4)
    ========================================= */
 
 const CONFIG = {
@@ -52,7 +52,7 @@ const SCREENS = {
             <header class="header-app">
                 <div class="header-logo-text">
                     RONDINES 
-                    <span id="sync-status" onclick="syncOfflineData(true)" style="font-size:0.75rem; color:#facc15; display:none; cursor:pointer; background:rgba(255,255,255,0.15); padding:4px 8px; border-radius:6px; margin-left:10px;">
+                    <span id="sync-status" onclick="syncOfflineData()" style="font-size:0.75rem; color:#facc15; display:none; cursor:pointer; background:rgba(255,255,255,0.15); padding:4px 8px; border-radius:6px; margin-left:10px;">
                         <i class="fas fa-sync-alt"></i> Pendientes
                     </span>
                 </div>
@@ -129,7 +129,7 @@ async function doLogin() {
             
             localStorage.setItem('ravensGuardUser', JSON.stringify(STATE.session));
             navigate('MAIN');
-            syncOfflineData(); // Intentar subir pendientes tras login
+            // Nota: Se eliminó el auto-envío al loguearse a petición
         } else { 
             throw new Error(data.message || "Credenciales incorrectas."); 
         }
@@ -156,7 +156,7 @@ function checkSession() {
             if (parsedData && parsedData.isLoggedIn === true && parsedData.usuario) {
                 STATE.session = parsedData;
                 navigate('MAIN');
-                syncOfflineData(); 
+                // Nota: Se eliminó el auto-envío al verificar sesión
                 return;
             }
         }
@@ -185,10 +185,7 @@ async function toggleNFCScan() {
         return;
     }
 
-    // Aprovechamos que va a escanear para intentar limpiar la cola silenciosamente
-    if (navigator.onLine) {
-        syncOfflineData(false); 
-    }
+    // Nota: Se eliminó el auto-envío silencioso al escanear
 
     try {
         STATE.abortController = new AbortController(); 
@@ -290,11 +287,12 @@ async function registerPositionInDB(tagId) {
 
         const res = await response.json();
 
-        if (res.success) {
+        // Validamos si llegó bien al servidor
+        if (response.ok) {
             showModal('success', "Posición registrada en línea");
-            syncOfflineData(); 
+            // Nota: Se eliminó el auto-envío al registrar exitosamente
         } else {
-            showModal('error', "Error del servidor: " + res.message);
+            showModal('error', "Error del servidor: " + (res.message || "Desconocido"));
         }
 
     } catch (error) {
@@ -310,10 +308,12 @@ function saveToOfflineQueue(payload) {
     updateSyncUI();
 }
 
-// Nueva función de sincronización con anti-saturación y lectura de errores reales
-async function syncOfflineData(isManual = false) {
+// -----------------------------------------------------
+// FUNCIÓN DE SINCRONIZACIÓN (SOLO MANUAL)
+// -----------------------------------------------------
+async function syncOfflineData() {
     if (!navigator.onLine) {
-        if (isManual) showModal('error', "Aún no hay conexión a internet estable.");
+        showModal('error', "Aún no hay conexión a internet estable.");
         return;
     }
 
@@ -323,13 +323,11 @@ async function syncOfflineData(isManual = false) {
         return;
     }
 
-    if (isManual) {
-        showModal('loading', `Enviando ${queue.length} lecturas pendientes...`);
-    }
+    showModal('loading', `Enviando ${queue.length} lecturas pendientes...`);
 
     let newQueue = [];
     let successCount = 0;
-    let lastErrorMsg = ""; // Variable para capturar el chisme de por qué falla
+    let lastErrorMsg = ""; 
 
     for (let i = 0; i < queue.length; i++) {
         try {
@@ -338,39 +336,34 @@ async function syncOfflineData(isManual = false) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(queue[i])
             });
-            const res = await response.json();
             
-            if (res.success) {
+            // LA CLAVE: Si el servidor de Azure responde con un OK (200), asumimos éxito
+            // y YA NO lo volvemos a meter en la cola. Se borra del teléfono.
+            if (response.ok) {
                 successCount++;
             } else {
                 newQueue.push(queue[i]); 
-                // Guardamos el error exacto que mandó tu backend (ej. Power Apps)
-                lastErrorMsg = res.message || "Rechazado por el servidor";
+                lastErrorMsg = "Rechazado por el servidor";
             }
         } catch (error) {
             newQueue.push(queue[i]); 
             lastErrorMsg = "Fallo de red o Proxy caído";
         }
 
-        // EL TRUCO MAGISTRAL: Esperar medio segundo (500ms) entre cada envío
-        // Esto evita que Azure o Power Automate bloqueen las peticiones por llegar en ráfaga
+        // Retraso para evitar que Power Automate bloquee por saturación
         await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    // Actualizamos el almacenamiento con los que fallaron (si es que hubo)
+    // Guardamos la nueva cola (que estará vacía si todo salió bien)
     localStorage.setItem('ravensOfflineQueue', JSON.stringify(newQueue));
+    
+    // Al actualizar el UI, si la cola está vacía, el botón desaparece mágicamente
     updateSyncUI();
     
-    // Feedback final
-    if (isManual) {
-        if (newQueue.length === 0) {
-            showModal('success', "¡Sincronización completada!");
-        } else {
-            // Ahora la pantalla te dirá exactamente de quién es la culpa
-            showModal('error', `Se enviaron ${successCount}. Fallaron ${newQueue.length}. Motivo: ${lastErrorMsg}`);
-        }
-    } else if (successCount > 0 && newQueue.length === 0 && STATE.session.isLoggedIn) {
-        console.log("Sincronización silenciosa completada.");
+    if (newQueue.length === 0) {
+        showModal('success', "¡Sincronización completada!");
+    } else {
+        showModal('error', `Se enviaron ${successCount}. Fallaron ${newQueue.length}. Motivo: ${lastErrorMsg}`);
     }
 }
 
@@ -381,9 +374,9 @@ function updateSyncUI() {
     let queue = JSON.parse(localStorage.getItem('ravensOfflineQueue')) || [];
     if (queue.length > 0) {
         syncBadge.style.display = 'inline-block';
-        // Actualizamos el número en el texto del botón
         syncBadge.innerHTML = `<i class="fas fa-sync-alt"></i> ${queue.length} Pendiente(s)`;
     } else {
+        // Al ocultarse, el botón deja de ser interactuable
         syncBadge.style.display = 'none';
     }
 }
@@ -420,9 +413,9 @@ function closeModal() {
    6. EVENTOS DE RED Y ARRANQUE
    ========================================= */
 
+// Nota: Se eliminó el auto-envío calladito cuando el teléfono recupera WiFi/Datos
 window.addEventListener('online', () => {
-    // Cuando el celular detecta que regresó el WiFi/Datos, intenta sincronizar calladito
-    syncOfflineData(false);
+    console.log("Conexión restaurada. Hay datos pendientes listos para enviarse manualmente.");
 });
 
 window.addEventListener('offline', () => {
