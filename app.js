@@ -1,5 +1,5 @@
 /* =========================================
-   RAVENS GUARD - NFC TRACKING (OFFLINE SUPPORT V4)
+   RAVENS GUARD - NFC TRACKING (EDGE + HYBRID SYNC V7)
    ========================================= */
 
 const CONFIG = {
@@ -7,11 +7,67 @@ const CONFIG = {
     API_PROXY_URL: 'https://proxyguard.azurewebsites.net/api/ravens-proxy'
 };
 
+// =========================================================
+// CATÁLOGO DE RUTAS (VALIDACIÓN 100% OFFLINE)
+// =========================================================
+const CATALOGO_TAGS = {
+    "53:A5:1B:F3:32:00:01": { orden: 1, nombre: "Punto Azotea 1" },
+    "53:2A:57:F2:32:00:01": { orden: 2, nombre: "Punto Azotea 2" },
+    "53:95:CB:F2:32:00:01": { orden: 3, nombre: "Cuarto de maquinas" },
+    "53:64:14:F3:32:00:01": { orden: 4, nombre: "Cocineta" },
+    "53:DC:B9:F1:32:00:01": { orden: 5, nombre: "Cuarto de maquinas piso 15" },
+    "53:71:A9:F2:32:00:01": { orden: 6, nombre: "Escaleras de emergencia piso 15" },
+    "53:34:DB:F2:32:00:01": { orden: 7, nombre: "Escaleras de emergencia piso 13" },
+    "53:7F:8F:F2:32:00:01": { orden: 8, nombre: "Escaleras de emergencia piso 11" },
+    "53:A8:38:F3:32:00:01": { orden: 9, nombre: "Escaleras de emergencia piso 9" },
+    "53:E7:06:F3:32:00:01": { orden: 10, nombre: "Escaleras de emergencia piso 7" },
+    "53:41:F7:F2:32:00:01": { orden: 11, nombre: "Escaleras de emergencia piso 5" },
+    "53:3E:2B:F3:32:00:01": { orden: 12, nombre: "Escaleras de emergencia piso 3" },
+    "53:F9:EF:F2:32:00:01": { orden: 13, nombre: "Fondo lobby" },
+    "53:A5:FF:F2:32:00:01": { orden: 14, nombre: "Principio lobby" },
+    "53:FF:23:F3:32:00:01": { orden: 15, nombre: "Rampa entrada" },
+    "53:18:6C:F2:32:00:01": { orden: 16, nombre: "Agencia" },
+    "53:42:80:F2:32:00:01": { orden: 17, nombre: "Vespa" },
+    "53:18:73:F2:32:00:01": { orden: 18, nombre: "Medidores" },
+    "53:33:CA:F1:32:00:01": { orden: 19, nombre: "Rampa salida" },
+    "53:95:EC:F1:32:00:01": { orden: 20, nombre: "Subestación" },
+    "53:22:46:F3:32:00:01": { orden: 21, nombre: "Plumas de sotano" },
+    "53:99:96:F2:32:00:01": { orden: 22, nombre: "Estacionamiento -2 alto" },
+    "53:58:87:F2:32:00:01": { orden: 23, nombre: "Estacionamiento -2 bajo" },
+    "53:ED:A3:F2:32:00:01": { orden: 24, nombre: "Estacionamiento -3 alto" },
+    "53:EB:B6:F2:32:00:01": { orden: 25, nombre: "Estacionamiento -3 bajo" },
+    "53:D8:D2:F2:32:00:01": { orden: 26, nombre: "Estacionamiento -4 alto" },
+    "53:2A:0A:F2:32:00:01": { orden: 27, nombre: "Estacionamiento -4 bajo" },
+    "53:07:35:F2:32:00:01": { orden: 28, nombre: "Estacionamiento -5 alto" },
+    "53:94:15:F2:32:00:01": { orden: 29, nombre: "Estacionamiento -5 bajo" },
+    "53:B4:AF:F2:32:00:01": { orden: 30, nombre: "Estacionamiento -6 alto" },
+    "53:48:20:F2:32:00:01": { orden: 31, nombre: "Estacionamiento -6 bajo" },
+    "53:4B:50:F2:32:00:01": { orden: 32, nombre: "Estacionamiento -7 alto" },
+    "53:0C:11:F2:32:00:01": { orden: 33, nombre: "Estacionamiento -7 bajo" },
+    "53:31:F8:F1:32:00:01": { orden: 34, nombre: "Estacionamiento -8 alto" },
+    "53:AF:E6:F1:32:00:01": { orden: 35, nombre: "Estacionamiento -8 bajo" },
+    "53:05:E1:F1:32:00:01": { orden: 36, nombre: "Cuarto bombas" },
+    "53:53:2E:F2:32:00:01": { orden: 37, nombre: "Vertical PB LG" },
+    "53:29:D0:F1:32:00:01": { orden: 38, nombre: "Vertical Piso 3" },
+    "53:DB:26:F2:32:00:01": { orden: 39, nombre: "Vertical Piso 5" },
+    "53:E1:3F:F3:32:00:01": { orden: 40, nombre: "Vertical Piso 7" },
+    "53:BE:41:F2:32:00:01": { orden: 41, nombre: "Vertical Piso 9" },
+    "53:89:48:F2:32:00:01": { orden: 42, nombre: "Vertical Piso 11" },
+    "53:26:64:F2:32:00:01": { orden: 43, nombre: "Vertical Piso 13" },
+    "53:EB:03:F2:32:00:01": { orden: 44, nombre: "Vertical Piso 15" }
+};
+
+const TOTAL_PASOS = 44; 
+
 const STATE = {
     session: {
         isLoggedIn: false,
         condominioId: null,
         usuario: null
+    },
+    ruta: {
+        enCurso: false,
+        pasoActual: 1
     },
     isScanning: false,
     isProcessing: false, 
@@ -52,7 +108,7 @@ const SCREENS = {
             <header class="header-app">
                 <div class="header-logo-text">
                     RONDINES 
-                    <span id="sync-status" onclick="syncOfflineData()" style="font-size:0.75rem; color:#facc15; display:none; cursor:pointer; background:rgba(255,255,255,0.15); padding:4px 8px; border-radius:6px; margin-left:10px;">
+                    <span id="sync-status" onclick="syncOfflineData(true)" style="font-size:0.75rem; color:#facc15; display:none; cursor:pointer; background:rgba(255,255,255,0.15); padding:4px 8px; border-radius:6px; margin-left:10px;">
                         <i class="fas fa-sync-alt"></i> Pendientes
                     </span>
                 </div>
@@ -62,6 +118,15 @@ const SCREENS = {
             </header>
             
             <div class="scan-container">
+                <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; margin-bottom: 25px; text-align: center;">
+                    <div id="route-info" style="color: #facc15; font-size: 1rem; font-weight: bold; margin-bottom: 10px;">
+                        Presiona Iniciar para comenzar.
+                    </div>
+                    <button id="btn-recorrido" class="btn-primary" onclick="toggleRecorrido()" style="padding: 10px; font-size: 0.9rem;">
+                        INICIAR RECORRIDO
+                    </button>
+                </div>
+
                 <div id="status-text" style="color:white; margin-bottom:30px; font-size:1.2rem; font-weight:bold;">Listo para escanear</div>
                 
                 <div id="nfc-btn" class="nfc-button" onclick="toggleNFCScan()">
@@ -71,7 +136,7 @@ const SCREENS = {
 
                 <div class="info-text">
                     Acerca el dispositivo al punto de control NFC.
-                    Asegúrate de tener el NFC activado.
+                    Asegúrate de seguir el orden exacto de la ruta.
                 </div>
             </div>
         </div>
@@ -79,7 +144,7 @@ const SCREENS = {
 };
 
 /* =========================================
-   2. FUNCIONES PRINCIPALES
+   2. FUNCIONES PRINCIPALES Y RUTA
    ========================================= */
 
 function navigate(screenName) {
@@ -87,10 +152,67 @@ function navigate(screenName) {
     if (viewport) {
         viewport.innerHTML = SCREENS[screenName];
         if (screenName === 'MAIN') {
-            updateSyncUI(); 
+            actualizarUIRuta(); 
+            updateSyncUI(); // Actualizar botón si hay pendientes
         }
     }
 }
+
+// -- LÓGICA DE RUTAS --
+function getNombrePaso(ordenBuscado) {
+    for (const tagId in CATALOGO_TAGS) {
+        if (CATALOGO_TAGS[tagId].orden === ordenBuscado) {
+            return CATALOGO_TAGS[tagId].nombre;
+        }
+    }
+    return "Punto Desconocido";
+}
+
+function cargarEstadoRuta() {
+    const guardado = localStorage.getItem('ravensRuta');
+    if (guardado) {
+        STATE.ruta = JSON.parse(guardado);
+    }
+}
+
+function guardarEstadoRuta() {
+    localStorage.setItem('ravensRuta', JSON.stringify(STATE.ruta));
+}
+
+function actualizarUIRuta() {
+    const info = document.getElementById('route-info');
+    const btn = document.getElementById('btn-recorrido');
+    if (!info || !btn) return;
+
+    if (STATE.ruta.enCurso) {
+        const nombreEsperado = getNombrePaso(STATE.ruta.pasoActual);
+        info.innerHTML = `Paso ${STATE.ruta.pasoActual} de ${TOTAL_PASOS}<br><span style="color:white; font-size:0.9rem;">Dirígete a: ${nombreEsperado}</span>`;
+        btn.innerText = "CANCELAR RECORRIDO";
+        btn.style.background = "#ef4444"; 
+    } else {
+        info.innerHTML = "Recorrido no iniciado";
+        btn.innerText = "INICIAR RECORRIDO";
+        btn.style.background = "#2563eb"; 
+    }
+}
+
+function toggleRecorrido() {
+    if (!STATE.ruta.enCurso) {
+        STATE.ruta.enCurso = true;
+        STATE.ruta.pasoActual = 1;
+        guardarEstadoRuta();
+        actualizarUIRuta();
+        showModal('success', "Recorrido Iniciado. Dirígete al Paso 1.");
+    } else {
+        if (confirm("¿Seguro que deseas cancelar el recorrido actual? Tendrás que empezar desde el paso 1.")) {
+            STATE.ruta.enCurso = false;
+            STATE.ruta.pasoActual = 1;
+            guardarEstadoRuta();
+            actualizarUIRuta();
+        }
+    }
+}
+// --------------------
 
 async function doLogin() {
     const user = document.getElementById('login-user').value.trim();
@@ -128,8 +250,8 @@ async function doLogin() {
             };
             
             localStorage.setItem('ravensGuardUser', JSON.stringify(STATE.session));
+            cargarEstadoRuta();
             navigate('MAIN');
-            // Nota: Se eliminó el auto-envío al loguearse a petición
         } else { 
             throw new Error(data.message || "Credenciales incorrectas."); 
         }
@@ -155,8 +277,8 @@ function checkSession() {
             
             if (parsedData && parsedData.isLoggedIn === true && parsedData.usuario) {
                 STATE.session = parsedData;
+                cargarEstadoRuta();
                 navigate('MAIN');
-                // Nota: Se eliminó el auto-envío al verificar sesión
                 return;
             }
         }
@@ -168,7 +290,7 @@ function checkSession() {
 }
 
 /* =========================================
-   3. LÓGICA NFC
+   3. LÓGICA NFC Y VALIDACIÓN EDGE
    ========================================= */
 
 async function toggleNFCScan() {
@@ -176,16 +298,17 @@ async function toggleNFCScan() {
     const statusTxt = document.getElementById('status-text');
     const btnTxt = document.getElementById('btn-text');
 
-    if (STATE.isScanning || STATE.isProcessing) {
+    if (STATE.isScanning || STATE.isProcessing) return;
+
+    if (!STATE.ruta.enCurso) {
+        alert("Debes presionar 'INICIAR RECORRIDO' antes de escanear.");
         return;
     }
 
     if (!('NDEFReader' in window)) {
-        alert("Tu dispositivo o navegador no soporta lectura NFC web. Asegúrate de usar Chrome en Android y HTTPS.");
+        alert("Tu dispositivo no soporta lectura NFC web. Usa Chrome en Android.");
         return;
     }
-
-    // Nota: Se eliminó el auto-envío silencioso al escanear
 
     try {
         STATE.abortController = new AbortController(); 
@@ -247,15 +370,58 @@ async function handleNFCReading(event) {
     }
 
     resetScanUI();
-    await registerPositionInDB(serialNumber);
+
+    // 1. Validar que el Tag exista en nuestro catálogo local
+    const tagInfo = CATALOGO_TAGS[serialNumber];
+    if (!tagInfo) {
+        showModal('error', "Tag no reconocido en el catálogo del sistema.");
+        return;
+    }
+
+    // 2. Validar orden estricto localmente
+    if (tagInfo.orden !== STATE.ruta.pasoActual) {
+        const nombreEsperado = getNombrePaso(STATE.ruta.pasoActual);
+        showModal('error', `¡Punto Incorrecto! Estás en '${tagInfo.nombre}'. Te toca ir a: '${nombreEsperado}' (Paso ${STATE.ruta.pasoActual})`);
+        return;
+    }
+
+    // 3. Determinar Tipo de Marca
+    let tipoMarca = "Rondín";
+    if (STATE.ruta.pasoActual === 1) tipoMarca = "Inicio";
+    if (STATE.ruta.pasoActual === TOTAL_PASOS) tipoMarca = "Fin";
+
+    // 4. Lógica Híbrida: Azure solo para Inicio y Fin
+    if (tipoMarca === "Inicio" || tipoMarca === "Fin") {
+        // Se manda a Azure o a la cola pendiente, pero NO bloquea el recorrido
+        await registerPositionInDB(serialNumber, tipoMarca);
+    } else {
+        // Validación offline instantánea para los pasos 2 al 43
+        showModal('success', `Punto ${STATE.ruta.pasoActual} validado: ${tagInfo.nombre}`);
+    }
+
+    // 5. Avanzar de paso
+    if (STATE.ruta.pasoActual === TOTAL_PASOS) {
+        STATE.ruta.enCurso = false;
+        STATE.ruta.pasoActual = 1;
+        
+        // Retraso ligero para que no se empalmen los mensajes
+        setTimeout(() => {
+            showModal('success', "¡RECORRIDO COMPLETADO CON ÉXITO!");
+        }, 1200);
+    } else {
+        STATE.ruta.pasoActual++;
+    }
+    
+    guardarEstadoRuta();
+    actualizarUIRuta();
 }
 
 /* =========================================
-   4. ENVÍO A BASE DE DATOS Y MODO OFFLINE
+   4. COMUNICACIÓN INICIO/FIN CON AZURE + COLA PENDIENTE
    ========================================= */
 
-async function registerPositionInDB(tagId) {
-    showModal('loading', "Procesando...");
+async function registerPositionInDB(tagId, tipoMarca) {
+    showModal('loading', `Procesando aviso de ${tipoMarca}...`);
 
     const payload = {
         action: 'submit_form',
@@ -267,14 +433,14 @@ async function registerPositionInDB(tagId) {
             Guardia: STATE.session.usuario,
             Condominio: STATE.session.condominioId,
             Fecha: new Date().toISOString(),
-            TipoMarca: "Rondín",
-            Estatus: "Registrado"
+            TipoMarca: tipoMarca, 
+            Estatus: "Completado"
         }
     };
 
     if (!navigator.onLine) {
         saveToOfflineQueue(payload);
-        showModal('success', "Guardado localmente (Sin red)");
+        showModal('success', `Aviso de ${tipoMarca} guardado en pendientes (Sin red).`);
         return;
     }
 
@@ -285,19 +451,16 @@ async function registerPositionInDB(tagId) {
             body: JSON.stringify(payload)
         });
 
-        const res = await response.json();
-
-        // Validamos si llegó bien al servidor
         if (response.ok) {
-            showModal('success', "Posición registrada en línea");
-            // Nota: Se eliminó el auto-envío al registrar exitosamente
+            showModal('success', `Aviso de ${tipoMarca} registrado en línea.`);
         } else {
-            showModal('error', "Error del servidor: " + (res.message || "Desconocido"));
+            // Si el servidor falla temporalmente, lo salvamos en la cola para no perder el aviso
+            saveToOfflineQueue(payload);
+            showModal('error', `Error del servidor. El aviso de ${tipoMarca} se guardó en pendientes.`);
         }
-
     } catch (error) {
         saveToOfflineQueue(payload);
-        showModal('success', "Guardado localmente (Red inestable)");
+        showModal('success', `Aviso de ${tipoMarca} guardado en pendientes (Red inestable).`);
     }
 }
 
@@ -309,11 +472,11 @@ function saveToOfflineQueue(payload) {
 }
 
 // -----------------------------------------------------
-// FUNCIÓN DE SINCRONIZACIÓN (SOLO MANUAL)
+// FUNCIÓN DE SINCRONIZACIÓN MANUAL (SOLO PARA INICIO Y FIN)
 // -----------------------------------------------------
-async function syncOfflineData() {
+async function syncOfflineData(isManual = false) {
     if (!navigator.onLine) {
-        showModal('error', "Aún no hay conexión a internet estable.");
+        if (isManual) showModal('error', "Aún no hay conexión a internet estable.");
         return;
     }
 
@@ -323,7 +486,7 @@ async function syncOfflineData() {
         return;
     }
 
-    showModal('loading', `Enviando ${queue.length} lecturas pendientes...`);
+    if (isManual) showModal('loading', `Enviando ${queue.length} avisos pendientes...`);
 
     let newQueue = [];
     let successCount = 0;
@@ -337,8 +500,6 @@ async function syncOfflineData() {
                 body: JSON.stringify(queue[i])
             });
             
-            // LA CLAVE: Si el servidor de Azure responde con un OK (200), asumimos éxito
-            // y YA NO lo volvemos a meter en la cola. Se borra del teléfono.
             if (response.ok) {
                 successCount++;
             } else {
@@ -350,20 +511,18 @@ async function syncOfflineData() {
             lastErrorMsg = "Fallo de red o Proxy caído";
         }
 
-        // Retraso para evitar que Power Automate bloquee por saturación
         await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    // Guardamos la nueva cola (que estará vacía si todo salió bien)
     localStorage.setItem('ravensOfflineQueue', JSON.stringify(newQueue));
-    
-    // Al actualizar el UI, si la cola está vacía, el botón desaparece mágicamente
     updateSyncUI();
     
-    if (newQueue.length === 0) {
-        showModal('success', "¡Sincronización completada!");
-    } else {
-        showModal('error', `Se enviaron ${successCount}. Fallaron ${newQueue.length}. Motivo: ${lastErrorMsg}`);
+    if (isManual) {
+        if (newQueue.length === 0) {
+            showModal('success', "¡Avisos pendientes enviados con éxito!");
+        } else {
+            showModal('error', `Se enviaron ${successCount}. Fallaron ${newQueue.length}. Motivo: ${lastErrorMsg}`);
+        }
     }
 }
 
@@ -376,7 +535,6 @@ function updateSyncUI() {
         syncBadge.style.display = 'inline-block';
         syncBadge.innerHTML = `<i class="fas fa-sync-alt"></i> ${queue.length} Pendiente(s)`;
     } else {
-        // Al ocultarse, el botón deja de ser interactuable
         syncBadge.style.display = 'none';
     }
 }
@@ -413,13 +571,10 @@ function closeModal() {
    6. EVENTOS DE RED Y ARRANQUE
    ========================================= */
 
-// Nota: Se eliminó el auto-envío calladito cuando el teléfono recupera WiFi/Datos
+// Intentar enviar silenciosamente cuando vuelva la red, o dejar que el usuario use el botón
 window.addEventListener('online', () => {
-    console.log("Conexión restaurada. Hay datos pendientes listos para enviarse manualmente.");
-});
-
-window.addEventListener('offline', () => {
-    console.log("Sin conexión a internet. Modo offline activado.");
+    console.log("Conexión restaurada. Intentando enviar avisos pendientes silenciosamente.");
+    syncOfflineData(false);
 });
 
 window.onload = () => {
