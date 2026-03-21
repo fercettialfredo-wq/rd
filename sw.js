@@ -1,4 +1,4 @@
-const CACHE_NAME = 'Ravens Guard NFC-v8';
+const CACHE_NAME = 'Ravens Guard NFC-v9';
 const assets = [
   './',
   './index.html',
