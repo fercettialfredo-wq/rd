@@ -1,5 +1,5 @@
 /* =========================================
-   RAVENS GUARD - NFC TRACKING (EDGE + HYBRID SYNC V8)
+   RAVENS GUARD - NFC TRACKING (EDGE + HYBRID SYNC V9)
    ========================================= */
 
 const CONFIG = {
@@ -153,19 +153,35 @@ function navigate(screenName) {
         viewport.innerHTML = SCREENS[screenName];
         if (screenName === 'MAIN') {
             actualizarUIRuta(); 
-            updateSyncUI(); // Actualizar botón si hay pendientes
+            updateSyncUI(); 
         }
     }
 }
 
-// -- LÓGICA DE RUTAS --
+// -- LÓGICA DE RUTAS BLINDADA --
 function getNombrePaso(ordenBuscado) {
-    for (const tagId in CATALOGO_TAGS) {
-        if (CATALOGO_TAGS[tagId].orden === ordenBuscado) {
-            return CATALOGO_TAGS[tagId].nombre;
+    for (const key in CATALOGO_TAGS) {
+        if (CATALOGO_TAGS[key].orden === ordenBuscado) {
+            return CATALOGO_TAGS[key].nombre;
         }
     }
     return "Punto Desconocido";
+}
+
+// Nueva función a prueba de mayúsculas/minúsculas y espacios
+function encontrarTagEnCatalogo(serialLeido) {
+    if (!serialLeido) return null;
+    
+    // Limpiamos lo que leyó la antena (quitamos espacios y forzamos mayúsculas)
+    const leidoLimpio = serialLeido.trim().toUpperCase();
+    
+    // Buscamos en el catálogo ignorando también cómo se haya escrito ahí
+    for (const key in CATALOGO_TAGS) {
+        if (key.trim().toUpperCase() === leidoLimpio) {
+            return CATALOGO_TAGS[key];
+        }
+    }
+    return null;
 }
 
 function cargarEstadoRuta() {
@@ -361,21 +377,22 @@ async function handleNFCReading(event) {
         STATE.abortController.abort();
     }
 
-    // EL TRUCO ESTÁ AQUÍ: convertimos la lectura a mayúsculas para que coincida con tu catálogo
-    let serialNumber = event.serialNumber;
+    const serialNumber = event.serialNumber;
+    
     if (!serialNumber) {
         showModal('error', "Lectura vacía");
         resetScanUI();
         return;
     }
-    
-    serialNumber = serialNumber.toUpperCase();
 
     resetScanUI();
 
-    // 1. Validar que el Tag exista en nuestro catálogo local
-    const tagInfo = CATALOGO_TAGS[serialNumber];
+    // 1. Validar usando la nueva función blindada
+    const tagInfo = encontrarTagEnCatalogo(serialNumber);
+    
     if (!tagInfo) {
+        // Por si acaso, mostramos qué leyó para poder depurar si sigue fallando
+        console.log("Leído por la antena:", serialNumber);
         showModal('error', "Tag no reconocido en el catálogo del sistema.");
         return;
     }
@@ -394,10 +411,8 @@ async function handleNFCReading(event) {
 
     // 4. Lógica Híbrida: Azure solo para Inicio y Fin
     if (tipoMarca === "Inicio" || tipoMarca === "Fin") {
-        // Se manda a Azure o a la cola pendiente, pero NO bloquea el recorrido
         await registerPositionInDB(serialNumber, tipoMarca);
     } else {
-        // Validación offline instantánea para los pasos 2 al 43
         showModal('success', `Punto ${STATE.ruta.pasoActual} validado: ${tagInfo.nombre}`);
     }
 
@@ -406,7 +421,6 @@ async function handleNFCReading(event) {
         STATE.ruta.enCurso = false;
         STATE.ruta.pasoActual = 1;
         
-        // Retraso ligero para que no se empalmen los mensajes
         setTimeout(() => {
             showModal('success', "¡RECORRIDO COMPLETADO CON ÉXITO!");
         }, 1200);
@@ -456,7 +470,6 @@ async function registerPositionInDB(tagId, tipoMarca) {
         if (response.ok) {
             showModal('success', `Aviso de ${tipoMarca} registrado en línea.`);
         } else {
-            // Si el servidor falla temporalmente, lo salvamos en la cola para no perder el aviso
             saveToOfflineQueue(payload);
             showModal('error', `Error del servidor. El aviso de ${tipoMarca} se guardó en pendientes.`);
         }
@@ -573,7 +586,6 @@ function closeModal() {
    6. EVENTOS DE RED Y ARRANQUE
    ========================================= */
 
-// Intentar enviar silenciosamente cuando vuelva la red, o dejar que el usuario use el botón
 window.addEventListener('online', () => {
     console.log("Conexión restaurada. Intentando enviar avisos pendientes silenciosamente.");
     syncOfflineData(false);
