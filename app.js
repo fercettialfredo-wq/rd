@@ -1,5 +1,5 @@
 /* =========================================
-   RAVENS GUARD - NFC TRACKING (EDGE + HYBRID SYNC V7)
+   RAVENS GUARD - NFC TRACKING (EDGE + HYBRID SYNC V8)
    ========================================= */
 
 const CONFIG = {
@@ -361,13 +361,15 @@ async function handleNFCReading(event) {
         STATE.abortController.abort();
     }
 
-    const serialNumber = event.serialNumber;
-    
+    // EL TRUCO ESTÁ AQUÍ: convertimos la lectura a mayúsculas para que coincida con tu catálogo
+    let serialNumber = event.serialNumber;
     if (!serialNumber) {
         showModal('error', "Lectura vacía");
         resetScanUI();
         return;
     }
+    
+    serialNumber = serialNumber.toUpperCase();
 
     resetScanUI();
 
