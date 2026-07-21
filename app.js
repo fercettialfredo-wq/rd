@@ -41,7 +41,7 @@ const CATALOGO_TAGS = {
     "53:07:35:F2:32:00:01": { orden: 28, nombre: "Estacionamiento -5 alto" },
     "53:94:15:F2:32:00:01": { orden: 29, nombre: "Estacionamiento -5 bajo" },
     "53:B4:AF:F2:32:00:01": { orden: 30, nombre: "Estacionamiento -6 alto" },
-    "53:48:20:F2:32:00:01": { orden: 31, nombre: "Estacionamiento -6 bajo" },
+    "53:27:BE:F2:32:00:01": { orden: 31, nombre: "Estacionamiento -6 bajo" },
     "53:4B:50:F2:32:00:01": { orden: 32, nombre: "Estacionamiento -7 alto" },
     "53:0C:11:F2:32:00:01": { orden: 33, nombre: "Estacionamiento -7 bajo" },
     "53:31:F8:F1:32:00:01": { orden: 34, nombre: "Estacionamiento -8 alto" },
