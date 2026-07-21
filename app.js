@@ -54,7 +54,7 @@ const CATALOGO_TAGS = {
     "53:BE:41:F2:32:00:01": { orden: 41, nombre: "Vertical Piso 9" },
     "53:89:48:F2:32:00:01": { orden: 42, nombre: "Vertical Piso 11" },
     "53:26:64:F2:32:00:01": { orden: 43, nombre: "Vertical Piso 13" },
-    "53:EB:03:F2:32:00:01": { orden: 44, nombre: "Vertical Piso 15" }
+    "53:EB:03:F2:32:00:01": { orden: 44, nombre: "Vertical Piso 15 (FIN DE RECORRIDO)" }
 };
 
 const TOTAL_PASOS = 44; 
