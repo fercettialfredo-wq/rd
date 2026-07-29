@@ -48,11 +48,11 @@ const CATALOGO_TAGS = {
     "53:AF:E6:F1:32:00:01": { orden: 35, nombre: "Estacionamiento -8 bajo" },
     "53:05:E1:F1:32:00:01": { orden: 36, nombre: "Cuarto bombas" },
     "53:53:2E:F2:32:00:01": { orden: 37, nombre: "Vertical PB LG" },
-    "53:29:D0:F1:32:00:01": { orden: 38, nombre: "Vertical Piso 3" },
+    "5A:D4:88:C5:07:41:89": { orden: 38, nombre: "Vertical Piso 3" },
     "53:DB:26:F2:32:00:01": { orden: 39, nombre: "Vertical Piso 5" },
-    "53:E1:3F:F3:32:00:01": { orden: 40, nombre: "Vertical Piso 7" },
-    "53:BE:41:F2:32:00:01": { orden: 41, nombre: "Vertical Piso 9" },
-    "53:89:48:F2:32:00:01": { orden: 42, nombre: "Vertical Piso 11" },
+    "5A:E4:D0:C2:07:41:89": { orden: 40, nombre: "Vertical Piso 7" },
+    "5A:04:7F:C2:07:41:89": { orden: 41, nombre: "Vertical Piso 9" },
+    "5A:44:C6:BF:07:41:89": { orden: 42, nombre: "Vertical Piso 11" },
     "53:26:64:F2:32:00:01": { orden: 43, nombre: "Vertical Piso 13" },
     "53:EB:03:F2:32:00:01": { orden: 44, nombre: "Vertical Piso 15 (FIN DE RECORRIDO)" }
 };
