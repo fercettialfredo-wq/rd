@@ -70,7 +70,8 @@ const STATE = {
         pasoActual: 1
     },
     isScanning: false,
-    isProcessing: false, 
+    isProcessing: false,
+    isSyncing: false, // <-- NUEVO CANDADO
     ndefReader: null,
     abortController: null 
 };
@@ -391,7 +392,6 @@ async function handleNFCReading(event) {
     const tagInfo = encontrarTagEnCatalogo(serialNumber);
     
     if (!tagInfo) {
-        // Por si acaso, mostramos qué leyó para poder depurar si sigue fallando
         console.log("Leído por la antena:", serialNumber);
         showModal('error', "Tag no reconocido en el catálogo del sistema.");
         return;
@@ -495,49 +495,55 @@ async function syncOfflineData(isManual = false) {
         return;
     }
 
-    let queue = JSON.parse(localStorage.getItem('ravensOfflineQueue')) || [];
-    if (queue.length === 0) {
-        updateSyncUI();
-        return;
-    }
+    // 🚨 CANDADO: Si ya está sincronizando, ignoramos las peticiones repetidas
+    if (STATE.isSyncing) return;
+    STATE.isSyncing = true;
 
-    if (isManual) showModal('loading', `Enviando ${queue.length} avisos pendientes...`);
+    try {
+        let queue = JSON.parse(localStorage.getItem('ravensOfflineQueue')) || [];
+        if (queue.length === 0) return;
 
-    let newQueue = [];
-    let successCount = 0;
-    let lastErrorMsg = ""; 
+        if (isManual) showModal('loading', `Enviando ${queue.length} avisos pendientes...`);
 
-    for (let i = 0; i < queue.length; i++) {
-        try {
-            const response = await fetch(CONFIG.API_PROXY_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(queue[i])
-            });
-            
-            if (response.ok) {
-                successCount++;
-            } else {
+        let newQueue = [];
+        let successCount = 0;
+        let lastErrorMsg = ""; 
+
+        for (let i = 0; i < queue.length; i++) {
+            try {
+                const response = await fetch(CONFIG.API_PROXY_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(queue[i])
+                });
+                
+                if (response.ok) {
+                    successCount++;
+                } else {
+                    newQueue.push(queue[i]); 
+                    lastErrorMsg = "Rechazado por el servidor";
+                }
+            } catch (error) {
                 newQueue.push(queue[i]); 
-                lastErrorMsg = "Rechazado por el servidor";
+                lastErrorMsg = "Fallo de red o Proxy caído";
             }
-        } catch (error) {
-            newQueue.push(queue[i]); 
-            lastErrorMsg = "Fallo de red o Proxy caído";
+
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
 
-        await new Promise(resolve => setTimeout(resolve, 500));
-    }
+        localStorage.setItem('ravensOfflineQueue', JSON.stringify(newQueue));
 
-    localStorage.setItem('ravensOfflineQueue', JSON.stringify(newQueue));
-    updateSyncUI();
-    
-    if (isManual) {
-        if (newQueue.length === 0) {
-            showModal('success', "¡Avisos pendientes enviados con éxito!");
-        } else {
-            showModal('error', `Se enviaron ${successCount}. Fallaron ${newQueue.length}. Motivo: ${lastErrorMsg}`);
+        if (isManual) {
+            if (newQueue.length === 0) {
+                showModal('success', "¡Avisos pendientes enviados con éxito!");
+            } else {
+                showModal('error', `Se enviaron ${successCount}. Fallaron ${newQueue.length}. Motivo: ${lastErrorMsg}`);
+            }
         }
+    } finally {
+        // 🚨 SIEMPRE quitamos el candado y actualizamos la UI, pase lo que pase
+        STATE.isSyncing = false;
+        updateSyncUI();
     }
 }
 
